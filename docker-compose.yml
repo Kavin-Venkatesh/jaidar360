@@ -1,0 +1,17 @@
+version: '3.9'
+services:
+  whatsapp-bot:
+    build: .
+    container_name: jaidar-whatsapp-bot
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      PUBLIC_BASE_URL: http://localhost:3000
+      DISABLE_TWILIO_VALIDATION: "true"
+      REGISTERED_WHATSAPP_NUMBERS: "whatsapp:+14155238886"
+      TWILIO_WHATSAPP_NUMBER: "whatsapp:+14155238886"
+      BUSINESS_TIMEZONE: "Asia/Kolkata"
+      LOCATION_TOKEN_TTL_SECONDS: 300
+    restart: unless-stopped

@@ -1,0 +1,27 @@
+{
+  "name": "whatsapp-sales-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "NODE_ENV=test node --test",
+    "create:main-menu": "node scripts/create-menu.js",
+    "create:location-card": "node scripts/create-location-card.js",
+    "create:content": "node scripts/create-content-templates.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "twilio": "^6.1.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
