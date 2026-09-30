@@ -3,6 +3,14 @@ require("dotenv").config();
 const env = {
   PORT: Number(process.env.PORT || 3000),
   NODE_ENV: process.env.NODE_ENV || "development",
+  // "twilio" or "whatsapp" (Meta WhatsApp Cloud API). Decides who sends outbound messages.
+  MESSAGING_PROVIDER: (process.env.MESSAGING_PROVIDER || "twilio").toLowerCase(),
+  WHATSAPP_ACCESS_TOKEN: process.env.WHATSAPP_ACCESS_TOKEN || "",
+  WHATSAPP_PHONE_NUMBER_ID: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+  WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN || "",
+  WHATSAPP_APP_SECRET: process.env.WHATSAPP_APP_SECRET || "",
+  WHATSAPP_GRAPH_API_VERSION: process.env.WHATSAPP_GRAPH_API_VERSION || "v23.0",
+  DISABLE_WHATSAPP_VALIDATION: process.env.DISABLE_WHATSAPP_VALIDATION === "true",
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || "",
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN || "",
   TWILIO_WHATSAPP_NUMBER: process.env.TWILIO_WHATSAPP_NUMBER || "whatsapp:+14155238886",
@@ -10,6 +18,8 @@ const env = {
   TWILIO_ENABLE_LIVE: process.env.TWILIO_ENABLE_LIVE === "true",
   PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || "http://localhost:3000",
   CONTENT_MAIN_MENU: process.env.CONTENT_MAIN_MENU || "",
+  CONTENT_VISIT_LOCATION: process.env.CONTENT_VISIT_LOCATION || "",
+  CONTENT_MEETING_DRAFT_ACTIONS: process.env.CONTENT_MEETING_DRAFT_ACTIONS || "",
   CONTENT_CHECK_IN_LOCATION: process.env.CONTENT_CHECK_IN_LOCATION || "",
   CONTENT_POST_CHECKIN_MENU: process.env.CONTENT_POST_CHECKIN_MENU || "",
   CONTENT_COMPANY_NAME: process.env.CONTENT_COMPANY_NAME || "",

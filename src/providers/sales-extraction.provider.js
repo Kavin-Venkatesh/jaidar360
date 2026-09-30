@@ -1,5 +1,5 @@
 const env = require("../config/env");
-const { matchOption, optionIds } = require("../utils/visit-options");
+const { matchOption, optionIds, optionGuide } = require("../utils/visit-options");
 
 class SalesExtractionProvider {
   async extractMeeting() {
@@ -50,8 +50,14 @@ const SCHEMA_EXAMPLE = `{
 }`;
 
 const FIELD_RULES = `- contact.mobile: the customer contact's phone number as digits only. Convert spoken digits ("seven nine zero four...") to numerals. Null if not stated.
-- company.industry_group, company.industry, meeting.discussion_type, meeting.outcome, meeting.prospect_temperature: use ONLY the exact allowed values shown in the schema. Pick one only if the agent says it or clearly implies it (e.g. "hot lead", "they want a quotation, I need to follow up"). If unclear or nothing fits, use null. Never guess.
-- meeting.outcome is FOLLOW_UP_REQUIRED whenever a follow-up, quotation, callback or next visit is promised.`;
+- These five fields are dropdown answers in the agent's visit form. Output ONLY the ID on the left of "=" (never the label). Pick a value when the agent says it or clearly implies it; if unclear or nothing fits, use null. Never guess.
+  * company.industry_group (customer's sector): ${optionGuide("industryGroup")}
+  * company.industry (customer's line of business): ${optionGuide("industry")}
+  * meeting.discussion_type (main thing discussed): ${optionGuide("discussion")}
+  * meeting.outcome (how the meeting ended): ${optionGuide("outcome")}
+  * meeting.prospect_temperature (how likely to buy; "hot lead"/"ready to buy" = HOT, "interested but not urgent" = WARM, "not really interested"/"just browsing" = COLD): ${optionGuide("temperature")}
+- meeting.outcome is FOLLOW_UP_REQUIRED whenever a follow-up, callback or next visit is promised, PROPOSAL_REQUESTED when a quotation/proposal is asked for, DEMO_REQUIRED when a demo is requested, CONVERTED when an order is confirmed, NOT_INTERESTED when the customer declines.
+- follow_up.required must be true whenever meeting.outcome is FOLLOW_UP_REQUIRED, PROPOSAL_REQUESTED or DEMO_REQUIRED.`;
 
 const EXTRACT_SYSTEM = `You extract structured CRM data from a field sales agent's spoken visit notes (transcribed from a voice note, so expect filler words, minor transcription errors, and possible Hindi/Tamil/English mixing).
 

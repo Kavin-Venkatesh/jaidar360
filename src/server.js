@@ -11,7 +11,8 @@ app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
 }));
-app.use(express.json({ limit: "1mb" }));
+
+app.use(express.json({ limit: "1mb", verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 app.use(express.static("public"));
 
@@ -23,9 +24,14 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/health/ready", (req, res) => {
-  const ready = Boolean(env.TWILIO_WHATSAPP_NUMBER && env.PUBLIC_BASE_URL);
+  const providerReady =
+    env.MESSAGING_PROVIDER === "whatsapp"
+      ? Boolean(env.WHATSAPP_ACCESS_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID)
+      : Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_WHATSAPP_NUMBER);
+  const ready = Boolean(providerReady && env.PUBLIC_BASE_URL);
   res.status(ready ? 200 : 503).json({
     status: ready ? "READY" : "NOT_READY",
+    provider: env.MESSAGING_PROVIDER,
     checks: {
       config: ready,
     },

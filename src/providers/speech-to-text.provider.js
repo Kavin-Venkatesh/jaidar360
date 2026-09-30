@@ -1,4 +1,5 @@
 const env = require("../config/env");
+const { MEDIA_REF_PREFIX } = require("../utils/whatsapp-cloud-inbound");
 
 // Groq Whisper accepts: flac, mp3, mp4, mpeg, mpga, m4a, ogg, opus, wav, webm
 const EXT_BY_MIME = {
@@ -41,6 +42,14 @@ class MockSpeechToTextProvider extends SpeechToTextProvider {
 }
 
 async function downloadMedia(url) {
+  // Meta Cloud API voice notes arrive as a media ID; resolve + download through the Graph API.
+  if (String(url).startsWith(MEDIA_REF_PREFIX)) {
+    const { downloadMedia: downloadWhatsAppMedia } = require("../services/whatsapp-cloud.service");
+    const buffer = await downloadWhatsAppMedia(String(url).slice(MEDIA_REF_PREFIX.length));
+    if (!buffer.length) throw new Error("Downloaded audio is empty.");
+    return buffer;
+  }
+
   const headers = {};
   // Twilio media URLs are protected: Basic auth with account credentials.
   if (/twilio\.com/i.test(url) && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN) {

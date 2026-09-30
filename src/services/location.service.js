@@ -12,7 +12,7 @@ const {
   addAuditLog,
 } = require("../repositories/in-memory-store");
 
-const twilioService = require("./twilio.service");
+const messaging = require("./messaging.service");
 
 function generateSecureToken() {
   return crypto.randomBytes(18).toString("base64url");
@@ -175,7 +175,7 @@ async function processCapturedLocation({
       },
     );
 
-    await twilioService.sendText(
+    await messaging.sendText(
       tokenRecord.whatsappNumber,
       [
         "✅ Check-in completed.",
@@ -188,9 +188,12 @@ async function processCapturedLocation({
           timeZone: env.BUSINESS_TIMEZONE,
         })}`,
         "",
-        "What would you like to do next?",
       ].join("\n"),
     );
+
+    // Show the main menu (list-picker) so the agent can carry on without typing.
+    const { continueAfterCheckIn } = require("./conversation.service");
+    await continueAfterCheckIn(tokenRecord.whatsappNumber);
 
     return {
       success: true,
@@ -263,7 +266,7 @@ async function processCapturedLocation({
     /*
      * THIS WAS MISSING IN YOUR CODE.
      */
-    await twilioService.sendText(
+    await messaging.sendText(
       tokenRecord.whatsappNumber,
       [
         "✅ Visit location captured.",

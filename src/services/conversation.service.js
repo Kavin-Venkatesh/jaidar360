@@ -1,7 +1,7 @@
 const env = require("../config/env");
 const { parseIncomingMessage } = require("../conversation/action-parser");
 const { handleTransition } = require("../conversation/state-machine");
-const twilioService = require("./twilio.service");
+const messaging = require("./messaging.service");
 const store = require("../repositories/in-memory-store");
 const {
   getAgentByPhone,
@@ -14,11 +14,13 @@ const {
   markProcessedInbound,
   normalizePhoneNumber,
 } = store;
+const { VISIT_OPTIONS, matchOption, optionLabel } = require("../utils/visit-options");
 const { createLocationTokenForType } = require("./location.service");
 const {
   isVoiceMessage,
   processVoiceMeetingSubmission,
   handleMeetingDraftAction,
+  resumeMeetingDraftPrompt,
 } = require("./meeting-workflow.service");
 
 function normalizePhone(from) {
@@ -42,6 +44,22 @@ function getActionText(action) {
   return action && action.text ? String(action.text).trim() : "";
 }
 
+const GREETINGS = ["hi", "hii", "hello", "hey", "start"];
+const MENU_COMMANDS = ["menu", "main menu", "cancel"];
+
+function textKey(action) {
+  return action && action.type === "TEXT" ? getActionText(action).toLowerCase().replace(/[^a-z ]/g, "").trim() : "";
+}
+
+function isGreeting(action) {
+  return GREETINGS.includes(textKey(action));
+}
+
+// Explicit "leave this flow" commands. A greeting is NOT one of these.
+function isMenuCommand(action) {
+  return MENU_COMMANDS.includes(textKey(action));
+}
+
 function isBackAction(action) {
   return normalizeActionValue(action && action.action) === "BACK" || getActionText(action).toLowerCase() === "back";
 }
@@ -50,33 +68,23 @@ function isSkipAction(action) {
   return normalizeActionValue(action && action.action) === "SKIP" || getActionText(action).toLowerCase() === "skip";
 }
 
-async function sendPromptTemplate(to, templateSid, fallbackText, variables = {}) {
-  if (templateSid) {
-    try {
-      await twilioService.sendTemplate(to, templateSid, variables);
-      return;
-    } catch (err) {
-      console.error(`Template ${templateSid} failed, falling back to text:`, err.message);
-    }
-  }
-  await twilioService.sendText(to, fallbackText);
-}
 async function sendMenu(to, conversation) {
-  if (env.CONTENT_MAIN_MENU) {
-    await twilioService.sendTemplate(to, env.CONTENT_MAIN_MENU, {});
-  } else {
-    await twilioService.sendList(to, {
+  await messaging.sendContentOr(to, env.CONTENT_MAIN_MENU, {}, () =>
+    messaging.sendList(to, {
       title: "What would you like to do?",
-      button: "Choose",
       items: [
         { id: "CHECK_IN", label: "Check in" },
         { id: "NEW_CUSTOMER_VISIT", label: "New customer visit" },
       ],
-    });
-  }
+    }),
+  );
 
   conversation.currentState = "MAIN_MENU";
   updateConversation(to, conversation);
+}
+
+function buildLocationUrl(token) {
+  return `${env.PUBLIC_BASE_URL}/geo/capture?token=${encodeURIComponent(token)}`;
 }
 
 async function startCheckIn(conversation, from) {
@@ -91,20 +99,15 @@ async function startCheckIn(conversation, from) {
   conversation.data.pendingAction = "CHECK_IN";
   updateConversation(from, conversation);
 
-  const locationUrl = `${env.PUBLIC_BASE_URL}/geo/capture?token=${encodeURIComponent(token)}`;
-
-  await twilioService.sendText(
-    from,
-    ["📍 Check in", "", "Please open the link below to share your current location:", locationUrl].join("\n"),
-  );
+  await messaging.sendCard(from, {
+    title: "Check in",
+    body: "Share your current location to record your field visit.",
+    ctaTitle: "Share location",
+    actionUrl: buildLocationUrl(token),
+    contentSid: env.CONTENT_CHECK_IN_LOCATION,
+  });
 }
 
-/* -------------------------------------------------------------------------- */
-/*  New customer visit: step definitions                                      */
-/* -------------------------------------------------------------------------- */
-
-// Fallback options are only used when the matching CONTENT_* template SID is not set.
-// EDIT these to match your real lists.
 const VISIT_FLOW = [
   {
     state: "NEW_VISIT_COMPANY",
@@ -125,7 +128,11 @@ const VISIT_FLOW = [
     kind: "phone",
     field: "contactMobile",
     templateEnv: "CONTENT_PHONE",
-    prompt: "What is their mobile number? (or type Skip)",
+    prompt: "What is their mobile number?",
+    buttons: [
+      { id: "SKIP", title: "Skip" },
+      { id: "BACK", title: "Back" },
+    ],
   },
   {
     state: "NEW_VISIT_LOCATION",
@@ -138,12 +145,6 @@ const VISIT_FLOW = [
     field: "industryGroup",
     templateEnv: "CONTENT_INDUSTRY_GROUP",
     prompt: "Which industry group is this customer in?",
-    options: [
-      ["MANUFACTURING", "Manufacturing"],
-      ["SERVICE", "Service"],
-      ["TRADING", "Trading"],
-      ["OTHER", "Other"],
-    ],
   },
   {
     state: "NEW_VISIT_INDUSTRY",
@@ -151,12 +152,6 @@ const VISIT_FLOW = [
     field: "industry",
     templateEnv: "CONTENT_INDUSTRY",
     prompt: "Which industry?",
-    options: [
-      ["E_COMMERCE", "E-commerce"],
-      ["IT_SERVICES", "IT services"],
-      ["LOGISTICS", "Logistics"],
-      ["OTHER", "Other"],
-    ],
   },
   {
     state: "NEW_VISIT_DISCUSSION",
@@ -164,13 +159,6 @@ const VISIT_FLOW = [
     field: "discussion",
     templateEnv: "CONTENT_DISCUSSION",
     prompt: "What did you discuss?",
-    options: [
-      ["CUSTOMER_REQUIREMENT", "Customer requirement"],
-      ["PRICING", "Pricing"],
-      ["PRODUCT_DEMO", "Product demo"],
-      ["COMPLAINT", "Complaint"],
-      ["OTHER", "Other"],
-    ],
   },
   {
     state: "NEW_VISIT_OUTCOME",
@@ -178,11 +166,6 @@ const VISIT_FLOW = [
     field: "outcome",
     templateEnv: "CONTENT_MEETING_OUTCOME",
     prompt: "How did the meeting end?",
-    options: [
-      ["NEED_FOLLOW_UP", "Need follow-up"],
-      ["ORDER_CONFIRMED", "Order confirmed"],
-      ["NOT_INTERESTED", "Not interested"],
-    ],
   },
   {
     state: "NEW_VISIT_TEMPERATURE",
@@ -190,11 +173,6 @@ const VISIT_FLOW = [
     field: "temperature",
     templateEnv: "CONTENT_PROSPECT_TEMPERATURE",
     prompt: "How warm is this prospect?",
-    options: [
-      ["HOT", "Hot"],
-      ["WARM", "Warm"],
-      ["COLD", "Cold"],
-    ],
   },
 ];
 
@@ -208,13 +186,6 @@ function isVisitState(state) {
   return getVisitStepIndex(state) !== -1;
 }
 
-/* -------------------------------------------------------------------------- */
-/*  New customer visit: prompting                                             */
-/* -------------------------------------------------------------------------- */
-
-function buildLocationUrl(token) {
-  return `${env.PUBLIC_BASE_URL}/geo/capture?token=${encodeURIComponent(token)}`;
-}
 
 async function sendVisitLocationPrompt(from, conversation) {
   const visitId = conversation.data.activeVisitId || conversation.activeVisitId;
@@ -229,33 +200,44 @@ async function sendVisitLocationPrompt(from, conversation) {
   conversation.data.pendingAction = "VISIT_LOCATION";
   updateConversation(from, conversation);
 
-  const locationUrl = buildLocationUrl(token);
-  const fallbackText = [
-    "Share your location to start the visit.",
-    "",
-    `Open this link and let your phone read the GPS: ${locationUrl}`,
-  ].join("\n");
-
-  // ASSUMPTION: the template has one variable {{1}} = the location URL. Adjust if yours differs.
-  await sendPromptTemplate(from, env.CONTENT_VISIT_LOCATION, fallbackText, { 1: locationUrl });
+  await messaging.sendCard(from, {
+    title: "Visit location",
+    body: "Share your location to start the visit.",
+    ctaTitle: "Share location",
+    actionUrl: buildLocationUrl(token),
+    contentSid: env.CONTENT_VISIT_LOCATION,
+  });
 }
 
 async function sendChoicePrompt(from, step) {
+  const options = VISIT_OPTIONS[step.field];
   const templateSid = env[step.templateEnv];
-  if (templateSid) {
-    try {
-      await twilioService.sendTemplate(from, templateSid, {});
-      return;
-    } catch (err) {
-      console.error(`Template ${templateSid} failed, falling back to list:`, err.message);
-    }
+
+  if (options.length <= 3) {
+    await messaging.sendContentOr(from, templateSid, {}, () =>
+      messaging.sendQuickReply(from, {
+        title: step.prompt,
+        buttons: options.map((o) => ({ id: o.id, title: o.label })),
+      }),
+    );
+    return;
   }
 
-  await twilioService.sendList(from, {
-    title: step.prompt,
-    button: "Choose",
-    items: step.options.map(([id, label]) => ({ id, label })),
-  });
+  await messaging.sendContentOr(from, templateSid, {}, () =>
+    messaging.sendList(from, {
+      title: step.prompt,
+      items: options.map((o) => ({ id: o.id, label: o.label })),
+    }),
+  );
+}
+
+async function sendPhonePrompt(from, step) {
+  await messaging.sendContentOr(from, env[step.templateEnv], {}, () =>
+    messaging.sendQuickReply(from, {
+      title: `${step.prompt} Type the number, or tap Skip.`,
+      buttons: step.buttons,
+    }),
+  );
 }
 
 async function promptVisitStep(from, conversation, step) {
@@ -272,7 +254,12 @@ async function promptVisitStep(from, conversation, step) {
     return;
   }
 
-  await sendPromptTemplate(from, env[step.templateEnv], step.prompt);
+  if (step.kind === "phone") {
+    await sendPhonePrompt(from, step);
+    return;
+  }
+
+  await messaging.sendContentOr(from, env[step.templateEnv], {}, () => messaging.sendText(from, step.prompt));
 }
 
 async function startNewVisit(conversation, from) {
@@ -334,7 +321,7 @@ async function processVisitAnswer(conversation, from, action) {
 
   if (step.kind === "text") {
     if (!text) {
-      await twilioService.sendText(from, "Please type your answer.");
+      await messaging.sendText(from, "Please type your answer.");
       return;
     }
     conversation.data[step.field] = text;
@@ -353,7 +340,8 @@ async function processVisitAnswer(conversation, from, action) {
 
     const cleaned = text.replace(/[^\d+]/g, "").trim();
     if (!cleaned || cleaned.length < 8) {
-      await twilioService.sendText(from, "Please provide a valid mobile number or choose Skip.");
+      await messaging.sendText(from, "That doesn't look like a valid mobile number.");
+      await sendPhonePrompt(from, step);
       return;
     }
     conversation.data[step.field] = cleaned;
@@ -364,21 +352,21 @@ async function processVisitAnswer(conversation, from, action) {
 
   if (step.kind === "location") {
     // Location is captured through the web link, not by chat. Re-send the link.
-    await twilioService.sendText(from, "Please open the link below and allow location access to continue.");
+    await messaging.sendText(from, "Please open the link below and allow location access to continue.");
     await sendVisitLocationPrompt(from, conversation);
     return;
   }
 
   if (step.kind === "choice") {
-    const id = action && action.type !== "TEXT" && action.action ? String(action.action) : null;
-    const value = text || id;
-    if (!value) {
-      await twilioService.sendText(from, "Please choose one of the options.");
+    // Only accept a real option (list tap, button tap, or its label typed out). Anything else, e.g. "hi", is not an answer.
+    const option = matchOption(step.field, action && action.action) || matchOption(step.field, text);
+    if (!option) {
+      await messaging.sendText(from, "Please choose one of the options below.");
       await sendChoicePrompt(from, step);
       return;
     }
-    conversation.data[step.field] = value;
-    conversation.data[`${step.field}Id`] = id;
+    conversation.data[step.field] = option.label;
+    conversation.data[`${step.field}Id`] = option.id;
     updateConversation(from, conversation);
     await advanceVisit(from, conversation, index);
   }
@@ -438,7 +426,7 @@ async function finishVisit(from, conversation) {
     console.error("Saving visit failed:", err.message);
   }
 
-  await twilioService.sendText(
+  await messaging.sendText(
     from,
     [
       "✅ Visit recorded",
@@ -453,12 +441,7 @@ async function finishVisit(from, conversation) {
     ].join("\n"),
   );
 
-  for (const field of VISIT_FIELDS) {
-    delete conversation.data[field];
-    delete conversation.data[`${field}Id`];
-  }
-  conversation.data.activeVisitId = null;
-  conversation.activeVisitId = null;
+  clearVisitData(conversation);
 
   await sendMenu(from, conversation);
 }
@@ -473,8 +456,44 @@ function resolveMenuActionFromText(text = "") {
   return null;
 }
 
+function clearVisitData(conversation) {
+  for (const field of VISIT_FIELDS) {
+    delete conversation.data[field];
+    delete conversation.data[`${field}Id`];
+  }
+  conversation.data.activeVisitId = null;
+  conversation.activeVisitId = null;
+}
+
+// "hi" in the middle of a flow: keep the flow and repeat the current question.
+async function resumeFlow(from, conversation) {
+  await messaging.sendText(from, "👋 Welcome back! Let's continue where you left off.");
+
+  if (conversation.currentState === "CHECK_IN") {
+    await startCheckIn(conversation, from);
+    return;
+  }
+
+  const step = VISIT_FLOW[getVisitStepIndex(conversation.currentState)];
+  await promptVisitStep(from, conversation, step);
+}
+
 async function processKnownMessage(conversation, from, action) {
   const text = getActionText(action);
+
+  const inFlow = isVisitState(conversation.currentState) || conversation.currentState === "CHECK_IN";
+
+  if (inFlow && isGreeting(action)) {
+    await resumeFlow(from, conversation);
+    return;
+  }
+
+  if (inFlow && isMenuCommand(action)) {
+    clearVisitData(conversation);
+    await messaging.sendText(from, "Okay, cancelled. Back to the main menu.");
+    await sendMenu(from, conversation);
+    return;
+  }
 
   // Inside the visit flow every message is an answer to the current question.
   if (isVisitState(conversation.currentState)) {
@@ -503,7 +522,7 @@ async function processKnownMessage(conversation, from, action) {
       }
     }
 
-    await twilioService.sendText(from, "Please select one of the available options.");
+    await messaging.sendText(from, "Please select one of the available options.");
     return;
   }
 
@@ -517,7 +536,7 @@ async function processKnownMessage(conversation, from, action) {
     const transition = handleTransition(conversation, action);
     if (transition && Array.isArray(transition.messages)) {
       for (const message of transition.messages) {
-        if (message.type === "TEXT") await twilioService.sendText(from, message.text);
+        if (message.type === "TEXT") await messaging.sendText(from, message.text);
       }
     }
     return;
@@ -531,7 +550,7 @@ async function processKnownMessage(conversation, from, action) {
     }
   }
 
-  await twilioService.sendText(from, "Please select one of the available options.");
+  await messaging.sendText(from, "Please select one of the available options.");
 }
 
 async function handleIncomingMessage(message) {
@@ -555,7 +574,7 @@ async function handleIncomingMessage(message) {
   const agent = getAgentByPhone(from);
 
   if (!agent) {
-    await twilioService.sendText(from, "This number is not registered with JAIDAR.\nSomeone will call you back shortly.");
+    await messaging.sendText(from, "This number is not registered with JAIDAR.\nSomeone will call you back shortly.");
     return;
   }
 
@@ -575,12 +594,16 @@ async function handleIncomingMessage(message) {
   }
 
   if (conversation.currentState === "AWAITING_MEETING_DRAFT_CONFIRMATION" || conversation.currentState === "EDITING_MEETING_DRAFT") {
+    if (isGreeting(action) && (await resumeMeetingDraftPrompt({ conversation, from }))) return;
+
     const handledDraftAction = await handleMeetingDraftAction({ conversation, from, action });
     if (handledDraftAction) {
       addAuditLog("MEETING_DRAFT_ACTION", agent.id, "meeting_draft", conversation.data?.activeDraftId || conversation.activeDraftId || conversation.id, {
         state: conversation.currentState,
         action: action && (action.action || action.text),
       });
+      // Saved or cancelled: the draft flow is over, so offer the main menu again.
+      if (conversation.currentState === "MAIN_MENU") await sendMenu(from, conversation);
       return;
     }
   }
@@ -598,7 +621,16 @@ async function handleIncomingMessage(message) {
   });
 }
 
+async function continueAfterCheckIn(whatsappNumber) {
+  const from = normalizePhone(whatsappNumber);
+  const conversation = getConversationByPhone(from);
+  if (!conversation) return false;
+  await sendMenu(from, conversation);
+  return true;
+}
+
 module.exports = {
   handleIncomingMessage,
   continueVisitAfterLocation,
+  continueAfterCheckIn,
 };

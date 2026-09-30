@@ -1,4 +1,6 @@
-const twilioService = require("./twilio.service");
+const env = require("../config/env");
+const messaging = require("./messaging.service");
+const { optionLabel } = require("../utils/visit-options");
 const { updateConversation } = require("../repositories/in-memory-store");
 const { createSpeechToTextProvider } = require("../providers/speech-to-text.provider");
 const { createSalesExtractionProvider } = require("../providers/sales-extraction.provider");
@@ -29,44 +31,79 @@ function normalizeDraftAction(value = "") {
   return normalized.toUpperCase();
 }
 
+const DRAFT_BUTTONS = [
+  { id: "SAVE", title: "Save" },
+  { id: "EDIT", title: "Edit" },
+  { id: "CANCEL", title: "Cancel" },
+];
+
+// WhatsApp quick-reply body is limited to 1,024 chars and the Content template adds a header/footer around {{1}}.
+const MAX_SUMMARY_CHARS = 850;
+
+// Details only (no header / buttons): this is the {{1}} variable of the CONTENT_MEETING_DRAFT_ACTIONS template.
 function renderMeetingDraftSummary(draft) {
-  const draftJson = draft.draftJson || {};
-  const company = draftJson.company?.mentioned_name || "Not provided";
-  const contact = draftJson.contact?.mentioned_name || "Not provided";
-  const summary = draftJson.meeting?.summary || "Not provided";
-  const requirements =
-    draftJson.requirements && draftJson.requirements.length
-      ? draftJson.requirements
-          .map((item) => `${item.mentioned_product || "Product"} — ${item.quantity ?? "?"} ${item.unit || "units"}`)
-          .join("\n")
-      : "No product details captured.";
-  const followUp = draftJson.follow_up?.required
-    ? [draftJson.follow_up.date, draftJson.follow_up.action].filter(Boolean).join(" — ") || "Required"
+  const d = draft.draftJson || {};
+  const NP = "Not provided";
+  const company = d.company || {};
+  const contact = d.contact || {};
+  const meeting = d.meeting || {};
+
+  const industry = [optionLabel("industryGroup", company.industry_group), optionLabel("industry", company.industry)]
+    .filter(Boolean)
+    .join(" / ");
+  const requirements = (d.requirements || [])
+    .map((item) => `• ${item.mentioned_product || "Product"} — ${item.quantity ?? "?"} ${item.unit || "units"}`)
+    .join("\n");
+  const followUp = d.follow_up?.required
+    ? [d.follow_up.date, d.follow_up.action].filter(Boolean).join(" — ") || "Required"
     : "Not required";
 
-  return [
-    "📋 Meeting Summary",
-    "",
-    "🏢 Company",
-    String(company),
-    "",
-    "👤 Contact",
-    String(contact),
-    "",
-    "📝 Meeting",
-    String(summary),
-    "",
-    "📦 Requirement",
-    String(requirements),
-    "",
-    "📅 Follow-up",
-    String(followUp),
-    "",
-    "Please confirm these details.",
-    "",
-    "[ Save ] [ Edit ] [ Cancel ]",
+  const text = [
+    `🏢 Company: ${company.mentioned_name || NP}`,
+    `🏭 Industry: ${industry || NP}`,
+    `👤 Contact: ${contact.mentioned_name || NP}`,
+    `📞 Mobile: ${contact.mobile || NP}`,
+    `💬 Discussion: ${optionLabel("discussion", meeting.discussion_type) || NP}`,
+    `🏁 Outcome: ${optionLabel("outcome", meeting.outcome) || NP}`,
+    `🌡️ Prospect: ${optionLabel("temperature", meeting.prospect_temperature) || NP}`,
+    `📝 Summary: ${meeting.summary || NP}`,
+    `📦 Requirement:${requirements ? `\n${requirements}` : " None captured"}`,
+    `📅 Follow-up: ${followUp}`,
   ].join("\n");
+
+  return text.length > MAX_SUMMARY_CHARS ? `${text.slice(0, MAX_SUMMARY_CHARS - 1)}…` : text;
 }
+
+// Meeting summary with Save / Edit / Cancel buttons in ONE message:
+// Twilio -> CONTENT_MEETING_DRAFT_ACTIONS quick-reply template; WhatsApp Cloud -> native reply buttons (max 3, body <= 1,024).
+async function sendMeetingDraftSummary(from, draft) {
+  const details = renderMeetingDraftSummary(draft);
+
+  await messaging.sendContentOr(from, env.CONTENT_MEETING_DRAFT_ACTIONS, { 1: details }, () =>
+    messaging.sendQuickReply(from, {
+      title: `📋 Meeting Summary\n\n${details}\n\nPlease confirm these details.`,
+      buttons: DRAFT_BUTTONS,
+    }),
+  );
+}
+
+// Called when the agent says "hi" (etc.) mid-draft: re-show where they are instead of restarting.
+async function resumeMeetingDraftPrompt({ conversation, from }) {
+  const draftId = conversation.data?.activeDraftId || conversation.activeDraftId;
+  const draft = draftId && getMeetingDraftById(draftId);
+  if (!draft) return false;
+
+  await messaging.sendText(from, "👋 Let's continue with your meeting draft.");
+  if (conversation.currentState === "EDITING_MEETING_DRAFT") {
+    await messaging.sendText(from, EDIT_PROMPT);
+  } else {
+    await sendMeetingDraftSummary(from, draft);
+  }
+  return true;
+}
+
+const EDIT_PROMPT =
+  '✏️ What would you like to change? Send a text or voice note, e.g. "Change the quantity to 100 bags" or "Mark as hot lead". Reply Cancel to discard.';
 
 async function transcribeMessage(message) {
   const transcriptionProvider = createSpeechToTextProvider();
@@ -91,8 +128,7 @@ async function applyEditAndReply({ conversation, from, draftId, instruction }) {
   conversation.currentState = "AWAITING_MEETING_DRAFT_CONFIRMATION";
   updateConversation(from, conversation);
 
-  await twilioService.sendText(from, renderMeetingDraftSummary(getMeetingDraftById(draftId)));
-  await twilioService.sendText(from, "Reply SAVE, EDIT, or CANCEL to continue.");
+  await sendMeetingDraftSummary(from, getMeetingDraftById(draftId));
 }
 
 async function processVoiceMeetingSubmission({ conversation, from, message }) {
@@ -100,7 +136,7 @@ async function processVoiceMeetingSubmission({ conversation, from, message }) {
   if (!isVoiceMessage(message)) return false;
 
   try {
-    await twilioService.sendText(from, "🎙️ Got your voice note, processing...");
+    await messaging.sendText(from, "🎙️ Got your voice note, processing...");
     const transcription = await transcribeMessage(message);
 
     // Voice note while editing => treat as the correction, not a new meeting
@@ -149,12 +185,11 @@ async function processVoiceMeetingSubmission({ conversation, from, message }) {
     conversation.data.activeDraftId = draft.id;
     updateConversation(from, conversation);
 
-    await twilioService.sendText(from, renderMeetingDraftSummary(draft));
-    await twilioService.sendText(from, "Reply SAVE, EDIT, or CANCEL to continue.");
+    await sendMeetingDraftSummary(from, draft);
     return true;
   } catch (error) {
     console.error("[voice-meeting] failed:", error);
-    await twilioService.sendText(
+    await messaging.sendText(
       from,
       "⚠️ Sorry, I couldn't process that voice note. Please try again, or send it as a shorter recording.",
     );
@@ -180,9 +215,9 @@ async function handleMeetingDraftAction({ conversation, from, action }) {
     conversation.data = conversation.data || {};
     conversation.data.activeDraftId = null;
     updateConversation(from, conversation);
-    await twilioService.sendText(
+    await messaging.sendText(
       from,
-      `✅ Meeting saved successfully.\nCompany: ${savedMeeting.companyName || "Not provided"}\nContact: ${savedMeeting.contactName || "Not provided"}`,
+      `✅ Meeting saved successfully.\nCompany: ${savedMeeting?.companyName || "Not provided"}\nContact: ${savedMeeting?.contactName || "Not provided"}`,
     );
     return true;
   }
@@ -193,7 +228,7 @@ async function handleMeetingDraftAction({ conversation, from, action }) {
     conversation.data = conversation.data || {};
     conversation.data.activeDraftId = null;
     updateConversation(from, conversation);
-    await twilioService.sendText(from, "❌ Meeting draft cancelled.");
+    await messaging.sendText(from, "❌ Meeting draft cancelled.");
     return true;
   }
 
@@ -201,30 +236,28 @@ async function handleMeetingDraftAction({ conversation, from, action }) {
   if (actionKey === "EDIT" && !isEditing) {
     conversation.currentState = "EDITING_MEETING_DRAFT";
     updateConversation(from, conversation);
-    await twilioService.sendText(
-      from,
-      "✏️ What would you like to change? Send a text or voice note, e.g. \"Change the quantity to 100 bags\".",
-    );
+    await messaging.sendText(from, EDIT_PROMPT);
     return true;
   }
 
   // In editing state: the message itself is the correction
   if (isEditing) {
     if (!text) {
-      await twilioService.sendText(from, "Please tell me what to change (text or voice note), or reply CANCEL.");
+      await messaging.sendText(from, "Please tell me what to change (text or voice note), or reply Cancel.");
       return true;
     }
     try {
       await applyEditAndReply({ conversation, from, draftId, instruction: text });
     } catch (error) {
       console.error("[meeting-edit] failed:", error);
-      await twilioService.sendText(from, "⚠️ Sorry, I couldn't apply that change. Please try rephrasing it.");
+      await messaging.sendText(from, "⚠️ Sorry, I couldn't apply that change. Please try rephrasing it.");
     }
     return true;
   }
 
   // Awaiting confirmation but unrecognised reply
-  await twilioService.sendText(from, "Please reply SAVE, EDIT, or CANCEL.");
+  await messaging.sendText(from, "Please tap Save, Edit or Cancel.");
+  await sendMeetingDraftSummary(from, draft);
   return true;
 }
 
@@ -233,4 +266,6 @@ module.exports = {
   processVoiceMeetingSubmission,
   handleMeetingDraftAction,
   renderMeetingDraftSummary,
+  sendMeetingDraftSummary,
+  resumeMeetingDraftPrompt,
 };

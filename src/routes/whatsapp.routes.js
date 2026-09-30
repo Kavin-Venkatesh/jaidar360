@@ -1,7 +1,11 @@
 const express = require("express");
 const router = express.Router();
+const env = require("../config/env");
 const conversationService = require("../services/conversation.service");
+const { extractInboundMessages } = require("../utils/whatsapp-cloud-inbound");
+const { validateWhatsAppCloudRequest } = require("../middleware/whatsapp-cloud-validation.middleware");
 
+// Twilio inbound webhook (MESSAGING_PROVIDER=twilio). Set this URL in the Twilio console.
 router.post("/whatsapp", async (req, res) => {
   try {
     res.status(200).send("OK");
@@ -18,6 +22,32 @@ router.post("/whatsapp", async (req, res) => {
     console.error("Webhook processing error:", error);
     res.status(500).json({ message: "Webhook processing failed" });
   }
+});
+
+
+router.get("/whatsapp-cloud", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+
+  if (mode === "subscribe" && env.WHATSAPP_VERIFY_TOKEN && token === env.WHATSAPP_VERIFY_TOKEN) {
+    return res.status(200).send(String(req.query["hub.challenge"] || ""));
+  }
+  return res.sendStatus(403);
+});
+
+router.post("/whatsapp-cloud", validateWhatsAppCloudRequest, (req, res) => {
+  res.sendStatus(200);
+
+  setImmediate(async () => {
+    for (const message of extractInboundMessages(req.body)) {
+      try {
+        console.log("Received WhatsApp Cloud message:", { from: message.From, type: message.MessageType });
+        await conversationService.handleIncomingMessage(message);
+      } catch (error) {
+        console.error("Error processing WhatsApp Cloud message:", error);
+      }
+    }
+  });
 });
 
 module.exports = router;

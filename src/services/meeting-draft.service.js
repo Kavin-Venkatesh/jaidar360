@@ -7,11 +7,13 @@ const meetings = new Map();
 
 function defaultMeetingDraftJson() {
   return {
-    company: { mentioned_name: null, resolved_customer_id: null, confidence: 0.0 },
-    contact: { mentioned_name: null, resolved_contact_id: null, confidence: 0.0 },
+    company: { mentioned_name: null, industry_group: null, industry: null, resolved_customer_id: null, confidence: 0.0 },
+    contact: { mentioned_name: null, mobile: null, resolved_contact_id: null, confidence: 0.0 },
     meeting: {
       summary: null,
+      discussion_type: null,
       outcome: null,
+      prospect_temperature: null,
       topics_discussed: [],
       customer_needs: [],
       customer_feedback: null,
@@ -188,6 +190,11 @@ function saveMeetingDraft(draftId, { agentId, whatsappNumber }) {
     draftId: draft.id,
     companyName: draft.draftJson.company?.mentioned_name || null,
     contactName: draft.draftJson.contact?.mentioned_name || null,
+    contactMobile: draft.draftJson.contact?.mobile || null,
+    industryGroup: draft.draftJson.company?.industry_group || null,
+    industry: draft.draftJson.company?.industry || null,
+    discussion: draft.draftJson.meeting?.discussion_type || null,
+    prospectTemperature: draft.draftJson.meeting?.prospect_temperature || null,
     summary: draft.draftJson.meeting?.summary || null,
     outcome: draft.draftJson.meeting?.outcome || null,
     requirements: draft.draftJson.requirements || [],

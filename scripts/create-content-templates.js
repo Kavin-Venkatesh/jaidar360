@@ -3,6 +3,7 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const twilio = require("twilio");
+const { VISIT_OPTIONS } = require("../src/utils/visit-options");
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -125,8 +126,14 @@ async function createAllTemplates() {
   created.CONTENT_PHONE = await createTemplate({
     friendlyName: "phone_question",
     envKey: "CONTENT_PHONE",
-    contentType: "twilio/text",
-    data: { body: "What is their mobile number?" },
+    contentType: "twilio/quick-reply",
+    data: {
+      body: "What is their mobile number? Type the number, or tap Skip.",
+      actions: [
+        { id: "SKIP", title: "Skip" },
+        { id: "BACK", title: "Back" },
+      ],
+    },
   });
 
   created.CONTENT_VISIT_LOCATION = await createTemplate({
@@ -149,17 +156,7 @@ async function createAllTemplates() {
     data: {
       body: "Which industry group is this customer in?",
       button: "Choose",
-      items: [
-        { id: "SERVICE", item: "Service", description: "Service industry" },
-        { id: "MANUFACTURING", item: "Manufacturing", description: "Manufacturing" },
-        { id: "RETAIL", item: "Retail", description: "Retail" },
-        { id: "CONSTRUCTION", item: "Construction", description: "Construction" },
-        { id: "HEALTHCARE", item: "Healthcare", description: "Healthcare" },
-        { id: "EDUCATION", item: "Education", description: "Education" },
-        { id: "FINANCE", item: "Finance", description: "Finance" },
-        { id: "TECHNOLOGY", item: "Technology", description: "Technology" },
-        { id: "OTHER", item: "Other", description: "Other" },
-      ],
+      items: VISIT_OPTIONS.industryGroup.map((o) => ({ id: o.id, item: o.label, description: o.description })),
     },
   });
 
@@ -170,14 +167,7 @@ async function createAllTemplates() {
     data: {
       body: "Which industry?",
       button: "Choose",
-      items: [
-        { id: "ECOMMERCE", item: "E-commerce", description: "E-commerce" },
-        { id: "CONSULTING", item: "Consulting", description: "Consulting" },
-        { id: "IT_SERVICES", item: "IT Services", description: "IT Services" },
-        { id: "LOGISTICS", item: "Logistics", description: "Logistics" },
-        { id: "PROFESSIONAL_SERVICES", item: "Professional Services", description: "Professional Services" },
-        { id: "OTHER", item: "Other", description: "Other" },
-      ],
+      items: VISIT_OPTIONS.industry.map((o) => ({ id: o.id, item: o.label, description: o.description })),
     },
   });
 
@@ -188,15 +178,7 @@ async function createAllTemplates() {
     data: {
       body: "What did you discuss?",
       button: "Choose",
-      items: [
-        { id: "PRODUCT_REQUIREMENT", item: "Product requirement", description: "Product requirement" },
-        { id: "PRICING", item: "Pricing", description: "Pricing" },
-        { id: "TECHNICAL_DISCUSSION", item: "Technical discussion", description: "Technical discussion" },
-        { id: "DEMO", item: "Demo", description: "Demo" },
-        { id: "PROCUREMENT", item: "Procurement", description: "Procurement" },
-        { id: "CUSTOMER_REQUIREMENT", item: "Customer requirement", description: "Customer requirement" },
-        { id: "OTHER", item: "Other", description: "Other" },
-      ],
+      items: VISIT_OPTIONS.discussion.map((o) => ({ id: o.id, item: o.label, description: o.description })),
     },
   });
 
@@ -207,31 +189,35 @@ async function createAllTemplates() {
     data: {
       body: "How did the meeting end?",
       button: "Choose",
-      items: [
-        { id: "FOLLOW_UP_REQUIRED", item: "Follow-up required", description: "Follow-up required" },
-        { id: "PROPOSAL_REQUESTED", item: "Proposal requested", description: "Proposal requested" },
-        { id: "DEMO_REQUIRED", item: "Demo required", description: "Demo required" },
-        { id: "NEGOTIATION", item: "Negotiation", description: "Negotiation" },
-        { id: "NO_REQUIREMENT", item: "No requirement", description: "No requirement" },
-        { id: "NOT_INTERESTED", item: "Not interested", description: "Not interested" },
-        { id: "CONVERTED", item: "Converted", description: "Converted" },
-      ],
+      items: VISIT_OPTIONS.outcome.map((o) => ({ id: o.id, item: o.label, description: o.description })),
     },
   });
 
+  // 3 options => quick-reply buttons (in-session limit is 3 buttons).
   created.CONTENT_PROSPECT_TEMPERATURE = await createTemplate({
     friendlyName: "prospect_temperature",
     envKey: "CONTENT_PROSPECT_TEMPERATURE",
-    contentType: "twilio/list-picker",
+    contentType: "twilio/quick-reply",
     data: {
       body: "How warm is this prospect?",
-      button: "Choose",
-      items: [
-        { id: "HOT", item: "Hot", description: "Hot" },
-        { id: "WARM", item: "Warm", description: "Warm" },
-        { id: "COLD", item: "Cold", description: "Cold" },
+      actions: VISIT_OPTIONS.temperature.map((o) => ({ id: o.id, title: o.label })),
+    },
+  });
+
+  // Meeting summary from a voice note. {{1}} = the rendered details (see renderMeetingDraftSummary).
+  created.CONTENT_MEETING_DRAFT_ACTIONS = await createTemplate({
+    friendlyName: "meeting_draft_actions",
+    envKey: "CONTENT_MEETING_DRAFT_ACTIONS",
+    contentType: "twilio/quick-reply",
+    data: {
+      body: "📋 Meeting Summary\n\n{{1}}\n\nPlease confirm these details.",
+      actions: [
+        { id: "SAVE", title: "Save" },
+        { id: "EDIT", title: "Edit" },
+        { id: "CANCEL", title: "Cancel" },
       ],
     },
+    variables: { 1: "Company: ABC Traders" },
   });
 
   console.log("\nTemplate creation complete.");

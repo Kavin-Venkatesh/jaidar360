@@ -188,7 +188,7 @@ async function sendList(
     };
   }
 
-  const templateSid = contentSid || env.CONTENT_MAIN_MENU;
+  const templateSid = contentSid;
 
   try {
     if (templateSid) {
@@ -210,7 +210,7 @@ async function sendList(
 
     const fallbackBody = safeFallbackMessage({
       title,
-      body: button,
+      body: "Reply with one of the options below:",
       items,
     });
 
@@ -230,6 +230,7 @@ async function sendQuickReply(
   to,
   {
     title = "Choose",
+    buttons = [],
     contentSid = null,
     variables = {},
   } = {},
@@ -261,7 +262,9 @@ async function sendQuickReply(
       });
     }
 
-    return await sendText(recipient, title);
+    // No template (or it failed upstream): plain text that tells the user what to type.
+    const hint = buttons.length ? `\n\nReply: ${buttons.map((b) => b.title).join(" / ")}` : "";
+    return await sendText(recipient, `${title}${hint}`);
   } catch (error) {
     console.error("Twilio sendQuickReply failed:", {
       message: error.message,
@@ -282,7 +285,7 @@ async function sendCard(
     ctaTitle,
     actionUrl,
     contentSid: explicitContentSid = null,
-  },
+  } = {},
 ) {
   assertTwilioConfigured();
 
