@@ -22,10 +22,6 @@ app.get("/health", (req, res) => {
   res.json({ status: "UP" });
 });
 
-app.get("/health/live", (req, res) => {
-  res.json({ status: "LIVE" });
-});
-
 app.get("/health/ready", (req, res) => {
   const ready = Boolean(env.TWILIO_WHATSAPP_NUMBER && env.PUBLIC_BASE_URL);
   res.status(ready ? 200 : 503).json({

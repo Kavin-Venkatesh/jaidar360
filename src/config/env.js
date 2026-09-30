@@ -27,6 +27,16 @@ const env = {
   BUSINESS_TIMEZONE: process.env.BUSINESS_TIMEZONE || "Asia/Kolkata",
   REGISTERED_WHATSAPP_NUMBERS: (process.env.REGISTERED_WHATSAPP_NUMBERS || "whatsapp:+14155238886").split(",").map((value) => value.trim()).filter(Boolean),
   DISABLE_TWILIO_VALIDATION: process.env.DISABLE_TWILIO_VALIDATION === "true",
+  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || "",
+  ELEVENLABS_STT_MODEL: process.env.ELEVENLABS_STT_MODEL || "scribe_v1",
+  DRAFT_EXPIRATION_HOURS: Number(process.env.DRAFT_EXPIRATION_HOURS || 24),
+  GROQ_API_KEY: process.env.GROQ_API_KEY,
+  GROQ_MODEL: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+  GROQ_STT_MODEL: process.env.GROQ_STT_MODEL || "whisper-large-v3-turbo",
+  LLM_PROVIDER: process.env.LLM_PROVIDER || "groq",
+  STT_PROVIDER: process.env.STT_PROVIDER || "groq",
+  STT_PROMPT: process.env.STT_PROMPT,
+
 };
 
 module.exports = env;

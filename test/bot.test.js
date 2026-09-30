@@ -14,6 +14,14 @@ const {
 } = require("../src/repositories/in-memory-store");
 const twilioService = require("../src/services/twilio.service");
 const { handleIncomingMessage } = require("../src/services/conversation.service");
+const {
+  createMeetingDraft,
+  updateMeetingDraft,
+  getMeetingDraftById,
+  saveMeetingDraft,
+  getMeetingById,
+  getAllMeetings,
+} = require("../src/services/meeting-draft.service");
 
 test("List selection action is parsed to stable IDs", () => {
   const result = parseIncomingMessage({ Body: "Check in", ListId: "CHECK_IN" });
@@ -185,4 +193,48 @@ test("Main menu uses the env-backed Twilio content template when configured", as
 
   twilioService.sendTemplate = originalTemplate;
   twilioService.sendList = originalList;
+});
+
+test("Voice note flow creates a meeting draft and saves it on confirmation", async () => {
+  const originalSendText = twilioService.sendText;
+  const originalSendCard = twilioService.sendCard;
+  const calls = [];
+
+  twilioService.sendText = async (to, body) => {
+    calls.push({ to, body });
+    return { sid: "mock-text", status: "queued" };
+  };
+  twilioService.sendCard = async (...args) => {
+    calls.push({ card: args[1] });
+    return { sid: "mock-card", status: "queued" };
+  };
+
+  const voiceTranscript = "Visited ABC Traders today. Met Ravi Kumar. They need 50 bags of OPC cement and want a quotation by Friday.";
+  const draft = createMeetingDraft({
+    agentId: "agent-2",
+    whatsappNumber: "+919000000000",
+    transcript: voiceTranscript,
+  });
+
+  assert.equal(draft.status, "AWAITING_CONFIRMATION");
+  assert.equal(draft.draftJson.company.mentioned_name, "ABC Traders");
+  assert.equal(draft.draftJson.requirements[0].quantity, 50);
+
+  const updated = updateMeetingDraft(draft.id, {
+    draftJson: {
+      ...draft.draftJson,
+      requirements: [{ ...draft.draftJson.requirements[0], quantity: 100 }],
+    },
+  });
+
+  assert.equal(updated.draftJson.requirements[0].quantity, 100);
+
+  const savedMeeting = saveMeetingDraft(draft.id, { agentId: "agent-2", whatsappNumber: "+919000000000" });
+  assert.ok(savedMeeting);
+  assert.equal(savedMeeting.requirements[0].quantity, 100);
+  assert.equal(getMeetingDraftById(draft.id).status, "SAVED");
+  assert.equal(getAllMeetings().length, 1);
+
+  twilioService.sendText = originalSendText;
+  twilioService.sendCard = originalSendCard;
 });

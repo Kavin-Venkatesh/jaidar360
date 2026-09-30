@@ -273,6 +273,10 @@ async function processCapturedLocation({
       ].join("\n"),
     );
 
+    const { continueVisitAfterLocation } = require("./conversation.service");
+    
+    await continueVisitAfterLocation(tokenRecord.whatsappNumber);
+
     return {
       success: true,
       type: "VISIT_LOCATION",
