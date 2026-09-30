@@ -1,0 +1,10 @@
+node_modules
+web/node_modules
+web/dist
+.env
+.env.*
+!.env.example
+prisma/*.db
+prisma/*.db-journal
+uploads
+.git

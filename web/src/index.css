@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+:root {
+  --canvas-bg: #f8fafc;
+  --node-border: #e2e8f0;
+  --node-selected: #16a34a;
+  --node-error: #ef4444;
+  /* React Flow reads this from an ancestor; its own stylesheet loads lazily with the editor. */
+  --xy-background-color: var(--canvas-bg);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: #f8fafc;
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-[13px] font-medium text-white shadow-sm hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[13px] font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .icon-btn {
+    @apply inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .wa-chip {
+    @apply inline-block rounded bg-slate-100 px-1.5 py-px text-[11px] text-slate-600;
+  }
+  .wa-dot {
+    @apply inline-block h-2 w-2 rounded-full;
+  }
+}
+
+/* ---- Canvas ------------------------------------------------------------ */
+
+.wa-node {
+  width: 250px;
+  background: white;
+  border: 1.5px solid var(--node-border);
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  font-size: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.wa-node:hover {
+  box-shadow: 0 4px 12px rgb(15 23 42 / 0.08);
+}
+.wa-node.is-selected {
+  border-color: var(--node-selected);
+  box-shadow: 0 0 0 3px rgb(22 163 74 / 0.15);
+}
+.wa-node.has-error {
+  border-color: var(--node-error);
+}
+.wa-node.has-error.is-selected {
+  box-shadow: 0 0 0 3px rgb(239 68 68 / 0.15);
+}
+.wa-node.is-disabled {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.wa-node__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  min-width: 0;
+}
+.wa-node__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.wa-node__body {
+  padding: 0 10px 9px;
+  color: #475569;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.wa-node__options {
+  border-top: 1px solid #f1f5f9;
+}
+.wa-node__option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 14px 0 10px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  background: #fafafa;
+}
+.wa-node__option:last-child {
+  border-bottom: 0;
+  border-radius: 0 0 9px 9px;
+}
+.wa-node__option.is-true span {
+  color: #15803d;
+  font-weight: 600;
+}
+.wa-node__option.is-false span {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.wa-node .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: white;
+  border: 2px solid #94a3b8;
+}
+.wa-node .react-flow__handle:hover {
+  border-color: var(--node-selected);
+}
+.wa-node .react-flow__handle.wa-handle-true {
+  border-color: #16a34a;
+}
+.wa-node .react-flow__handle.wa-handle-false {
+  border-color: #dc2626;
+}
+
+/* The “+” that appears next to an unconnected output. */
+.wa-add-next {
+  position: absolute;
+  top: 50%;
+  right: -30px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #64748b;
+  cursor: pointer;
+  z-index: 1;
+}
+.wa-add-next:hover {
+  border-color: var(--node-selected);
+  color: var(--node-selected);
+}
+.wa-add-next::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  width: 10px;
+  border-top: 1.5px dashed #cbd5e1;
+}

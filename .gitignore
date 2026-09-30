@@ -14,3 +14,8 @@ yarn-error.log*
 # OS/editor files
 .DS_Store
 Thumbs.db
+prisma/*.db
+prisma/*.db-journal
+uploads/
+web/node_modules/
+web/dist/

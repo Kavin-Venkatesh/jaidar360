@@ -47,6 +47,21 @@ const env = {
   STT_PROVIDER: process.env.STT_PROVIDER || "groq",
   STT_PROMPT: process.env.STT_PROMPT,
 
+  // Canvas flow builder
+  DATABASE_URL: process.env.DATABASE_URL,
+  JWT_SECRET: process.env.JWT_SECRET || "",
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || "12h",
+  FLOW_SESSION_IDLE_MINUTES: Number(process.env.FLOW_SESSION_IDLE_MINUTES || 60),
+  FLOW_SESSION_TIMEOUT_NOTICE: process.env.FLOW_SESSION_TIMEOUT_NOTICE !== "false",
+  UPLOADS_DIR: process.env.UPLOADS_DIR || "uploads",
 };
+
+// Prisma reads DATABASE_URL straight from process.env.
+if (!process.env.DATABASE_URL) process.env.DATABASE_URL = env.DATABASE_URL = "file:./dev.db";
+
+if (!env.JWT_SECRET) {
+  if (env.NODE_ENV === "production") throw new Error("JWT_SECRET must be set in production.");
+  env.JWT_SECRET = "dev-only-jwt-secret";
+}
 
 module.exports = env;

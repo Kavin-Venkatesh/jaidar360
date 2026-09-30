@@ -4,6 +4,9 @@ const env = require("../config/env");
 const conversationService = require("../services/conversation.service");
 const { extractInboundMessages } = require("../utils/whatsapp-cloud-inbound");
 const { validateWhatsAppCloudRequest } = require("../middleware/whatsapp-cloud-validation.middleware");
+const tenants = require("../config/tenants");
+const { parseWebhook } = require("../webhook/parser");
+const flowEngine = require("../engine/engine");
 
 // Twilio inbound webhook (MESSAGING_PROVIDER=twilio). Set this URL in the Twilio console.
 router.post("/whatsapp", async (req, res) => {
@@ -35,11 +38,19 @@ router.get("/whatsapp-cloud", (req, res) => {
   return res.sendStatus(403);
 });
 
+// Meta webhook. Numbers that belong to a canvas flow-builder tenant (src/config/tenants.js) go to the flow engine;
+// every other number keeps using the legacy state-machine bot.
 router.post("/whatsapp-cloud", validateWhatsAppCloudRequest, (req, res) => {
   res.sendStatus(200);
 
   setImmediate(async () => {
-    for (const message of extractInboundMessages(req.body)) {
+    for (const event of parseWebhook(req.body)) {
+      if (!tenants.byPhoneNumberId(event.phoneNumberId)) continue;
+      flowEngine.handleIncoming(event).catch((error) => console.error("Error processing flow-engine event:", error));
+    }
+
+    const skipPhoneNumberId = (id) => Boolean(tenants.byPhoneNumberId(id));
+    for (const message of extractInboundMessages(req.body, { skipPhoneNumberId })) {
       try {
         console.log("Received WhatsApp Cloud message:", { from: message.From, type: message.MessageType });
         await conversationService.handleIncomingMessage(message);

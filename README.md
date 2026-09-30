@@ -114,3 +114,51 @@ docker run -p 3000:3000 jaidar-whatsapp-bot
 
 ## Important platform limitation
 - Twilio Content API content templates must be created in the Twilio console or via scripts. The app keeps the content IDs in environment variables and falls back to a plain text flow when those IDs are not configured.
+
+## Canvas flow builder (n8n-style)
+
+Tenants design WhatsApp conversations on a canvas, link flows together and publish them. It runs next to the
+legacy bot: Meta webhooks for a tenant's `phone_number_id` (see `src/config/tenants.js`) go to the flow engine, and
+every other number still reaches the state-machine bot.
+
+| Piece | Where |
+| --- | --- |
+| Shared limits, validation, compiler (used by server **and** editor) | `shared/flow-rules/*.mjs` |
+| Auth (hard-coded users → JWT) | `src/config/users.js`, `src/auth/` |
+| Flows API, versions, publish | `src/flows/` |
+| Runtime engine (sessions, call stack, executors) | `src/engine/` |
+| Tenant-aware Cloud API sender + media download | `src/whatsapp/sender.js` |
+| Webhook parser | `src/webhook/parser.js` (wired into `POST /webhooks/whatsapp-cloud`) |
+| Storage | `prisma/schema.prisma` (SQLite) |
+| Editor UI (React + React Flow) | `web/` |
+
+### Run it
+
+```bash
+npm install                 # also runs prisma generate
+npm run web:install
+npm run db:push             # create prisma/dev.db
+npm run db:seed             # publish the Acme / FreshMart example flows
+npm run dev                 # API + webhook on PORT (3000)
+npm run web:dev             # editor on http://localhost:5173/builder (proxies /api)
+```
+
+`npm run web:build` produces `web/dist`, which Express serves at `/builder`.
+
+Logins: `acme_admin` / `Acme@123`, `fresh_admin` / `Fresh@123` (prototype only).
+
+### WhatsApp setup
+
+1. Webhook callback URL: `https://<tunnel>/webhooks/whatsapp-cloud`, verify token = `WHATSAPP_VERIFY_TOKEN`, subscribe to `messages`.
+2. Set `WHATSAPP_APP_SECRET` so webhook signatures are checked.
+3. Per tenant: `ACME_PHONE_NUMBER_ID` / `ACME_ACCESS_TOKEN` (default to the `WHATSAPP_*` number) and
+   `FRESHMART_PHONE_NUMBER_ID` / `FRESHMART_ACCESS_TOKEN`.
+4. Register agent phones: `ACME_AGENT_RAVI_PHONE`, `ACME_AGENT_PRIYA_PHONE`, `FRESHMART_AGENT_ARUN_PHONE`.
+   Unknown senders get a "not registered" reply.
+5. From an agent phone, send "hi" to the tenant number.
+
+### Tests
+
+`npm test` runs the legacy bot tests plus `test/flow-rules.test.js` (validation/compile), `test/flow-engine.test.js`
+(runtime scenarios from the plan against a fake Cloud API) and `test/flow-api.test.js` (auth, tenant isolation,
+409 saves, publish/rollback, linking). Each flow test file uses its own temporary SQLite database.

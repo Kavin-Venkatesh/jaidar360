@@ -43,12 +43,14 @@ function toInboundMessage(msg) {
 }
 
 // Returns every user message in the webhook. Delivery/read `statuses` events are ignored.
-function extractInboundMessages(body = {}) {
+// `skipPhoneNumberId(id)` drops messages sent to numbers handled elsewhere (the canvas flow engine).
+function extractInboundMessages(body = {}, { skipPhoneNumberId = () => false } = {}) {
   if (body.object !== "whatsapp_business_account") return [];
 
   const messages = [];
   for (const entry of body.entry || []) {
     for (const change of entry.changes || []) {
+      if (skipPhoneNumberId(change.value?.metadata?.phone_number_id)) continue;
       for (const msg of change.value?.messages || []) {
         messages.push(toInboundMessage(msg));
       }

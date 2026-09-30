@@ -30,6 +30,13 @@ const defaultAgents = [
     whatsappNumber: "whatsapp:+917904863284",
     isActive: true,
     createdAt: new Date().toISOString(),
+  },
+  {
+    id: "agent-4",
+    name: "Support Agent",
+    whatsappNumber: "whatsapp:+919994823789",
+    isActive: true,
+    createdAt: new Date().toISOString(),
   }
 ];
 
