@@ -242,3 +242,63 @@ test("api: submissions and media files are tenant-scoped", async () => {
   assert.equal((await call("GET", `/api/files/tnt_acme/s1/photo.jpg?token=${fresh}`)).status, 404);
   assert.equal((await call("GET", `/api/files/tnt_freshmart/..%2Ftnt_acme/s1/photo.jpg?token=${fresh}`)).status, 404);
 });
+
+test("api: location link node sends a one-time browser link that resumes the flow", async () => {
+  const engine = require("../src/engine/engine");
+  const { parseWebhook } = require("../src/webhook/parser");
+  const say = async (body, id = `wamid.gps.${crypto.randomUUID()}`) => {
+    const payload = { object: "whatsapp_business_account", entry: [{ changes: [{ value: { metadata: { phone_number_id: "PNID_ACME" }, messages: [{ id, from: "919000000002", type: "text", text: { body } }] } }] }] };
+    for (const event of parseWebhook(payload)) await engine.handleIncoming(event);
+  };
+
+  const flow = await createFlow(acme, "GPS check");
+  await save(acme, flow, {
+    nodes: [
+      trigger(["gps"]),
+      { id: "n_link", type: "locationLink", position: { x: 300, y: 0 }, data: { prompt: "Share where you are", buttonText: "Share location", linkMinutes: 10, saveAs: "gps" } },
+      endNode("n_end", "Got it: {{gps.latitude}}"),
+    ],
+    edges: [{ id: "e1", source: "n_trigger", target: "n_link" }, { id: "e2", source: "n_link", target: "n_end" }],
+  });
+  const published = await call("POST", `/api/flows/${flow.id}/publish`, { token: acme, body: {} });
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+
+  // The webhook test above left Priya mid-conversation; start clean so "gps" doesn't ask to restart.
+  await prisma.session.updateMany({ where: { agentId: "agt_priya", status: "active" }, data: { status: "cancelled" } });
+  outbox.length = 0;
+  await say("gps");
+  const cta = outbox.at(-1);
+  assert.equal(cta.interactive.type, "cta_url");
+  assert.equal(cta.interactive.action.parameters.display_text, "Share location");
+  const firstUrl = new URL(cta.interactive.action.parameters.url);
+  assert.match(firstUrl.pathname, /^\/flow-location\/[\w-]{20,}$/);
+
+  // Typing instead of opening the link: a reminder plus a fresh link.
+  outbox.length = 0;
+  await say("I'm at the store");
+  assert.match(outbox[0].text.body, /tap \*Share location\*/);
+  const path = new URL(outbox[1].interactive.action.parameters.url).pathname;
+  assert.notEqual(path, firstUrl.pathname);
+
+  const page = await fetch(`${base}${path}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /Share my location/);
+  assert.equal((await call("POST", path, { body: { latitude: 200, longitude: 0 } })).status, 400, "bad coordinates don't burn the link");
+
+  outbox.length = 0;
+  const ok = await call("POST", path, { body: { latitude: 13.0827, longitude: 80.2707, accuracy: 12.4 } });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(outbox.at(-1).text.body, "Got it: 13.0827");
+
+  assert.equal((await call("POST", path, { body: { latitude: 13, longitude: 80 } })).status, 410, "links are single-use");
+  assert.equal((await fetch(`${base}${path}`)).status, 404);
+  // The older link is unused but the flow has moved on.
+  const stale = await call("POST", firstUrl.pathname, { body: { latitude: 13, longitude: 80 } });
+  assert.equal(stale.status, 409);
+
+  const submission = await prisma.submission.findFirst({ where: { flowId: flow.id } });
+  const saved = JSON.parse(submission.data).gps;
+  assert.deepEqual({ ...saved, capturedAt: undefined }, { latitude: 13.0827, longitude: 80.2707, accuracy: 12, source: "browser", flagged: false, capturedAt: undefined });
+  const stored = await prisma.locationRequest.findMany({ where: { flowId: flow.id } });
+  assert.ok(stored.every((r) => !path.includes(r.tokenHash)), "only token hashes are stored");
+});

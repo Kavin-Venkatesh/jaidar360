@@ -23,6 +23,10 @@ export const LIMITS = {
   maxSections: 10,
 
   locationBody: 1024,
+  ctaBody: 1024,
+  ctaButton: 20,
+  minLinkMinutes: 1,
+  maxLinkMinutes: 1440,
 
   keyword: 30,
   maxKeywords: 20,

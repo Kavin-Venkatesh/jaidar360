@@ -129,6 +129,21 @@ const executors = {
     },
   },
 
+  // Sends a one-time link to a browser page that reads GPS; the page's POST resumes the flow
+  // through engine.resumeWithInput with a "browser_location" event.
+  locationLink: {
+    enter: async (node, ctx) => {
+      const { url } = await ctx.createLocationLink(node);
+      return { send: [renderers.ctaUrl(node, ctx.scope, url)], wait: true };
+    },
+    receive: (node, event) => {
+      const wrong = waitingForText(event);
+      if (wrong) return wrong;
+      if (event.kind === "browser_location") return { ok: true, handle: "default", value: event.location };
+      return retry(`Please tap *${node.buttonText}* below and allow location access in your browser.`);
+    },
+  },
+
   media: {
     enter: (node, ctx) => ({
       send: [renderers.prompt(node, ctx.scope, node.required ? "" : "\n\n(Reply *skip* to skip.)")],

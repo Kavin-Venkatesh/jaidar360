@@ -7,6 +7,7 @@ export const NODE_TYPES = [
   "list",
   "question",
   "location",
+  "locationLink",
   "media",
   "condition",
   "executeFlow",
@@ -30,7 +31,7 @@ export const CONDITION_OPERATORS = [
 ];
 
 // Nodes with exactly one input and one output can be disabled; the compiler routes around them.
-export const DISABLABLE_TYPES = new Set(["message", "question", "location", "media"]);
+export const DISABLABLE_TYPES = new Set(["message", "question", "location", "locationLink", "media"]);
 
 // Variables the runtime always provides, usable as {{agent.name}} etc.
 export const BUILT_IN_VARIABLES = ["agent.name", "agent.team", "agent.phone", "tenant.name"];
@@ -45,6 +46,7 @@ export function outputHandles(node) {
     case "message":
     case "question":
     case "location":
+    case "locationLink":
     case "media":
       return [null];
     case "buttons":
@@ -70,7 +72,7 @@ export function listRows(data) {
 
 export function savedVariable(node) {
   if (node?.data?.disabled) return null;
-  if (["buttons", "list", "question", "location", "media"].includes(node?.type)) {
+  if (["buttons", "list", "question", "location", "locationLink", "media"].includes(node?.type)) {
     const name = String(node.data?.saveAs || "").trim();
     return name || null;
   }

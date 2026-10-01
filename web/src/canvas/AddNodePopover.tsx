@@ -32,6 +32,10 @@ export function AddNodePopover() {
   const pick = (type: NodeType) => {
     const source = useEditor.getState().nodes.find((n) => n.id === picker.nodeId);
     if (!source) return;
+    if (picker.position) {
+      addNode(type, { x: picker.position.x, y: picker.position.y - 30 }, { nodeId: picker.nodeId, handleId: picker.handleId });
+      return;
+    }
     const handles = outputHandles(source);
     const index = Math.max(0, handles.indexOf(picker.handleId));
     const offsetY = handles.length > 1 ? (index - (handles.length - 1) / 2) * 140 : 0;

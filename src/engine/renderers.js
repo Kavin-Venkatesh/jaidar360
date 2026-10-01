@@ -71,8 +71,20 @@ function locationRequest(node, scope) {
   };
 }
 
+// Message with one URL button (Location Link nodes).
+function ctaUrl(node, scope, url) {
+  return {
+    type: "interactive",
+    interactive: {
+      type: "cta_url",
+      body: { text: render(node.prompt, scope, LIMITS.ctaBody) },
+      action: { name: "cta_url", parameters: { display_text: truncateText(node.buttonText, LIMITS.ctaButton), url } },
+    },
+  };
+}
+
 function prompt(node, scope, suffix = "") {
   return text(`${render(node.prompt, scope, LIMITS.textBody - suffix.length)}${suffix}`);
 }
 
-module.exports = { text, message, buttons, list, locationRequest, prompt, render };
+module.exports = { text, message, buttons, list, locationRequest, ctaUrl, prompt, render };

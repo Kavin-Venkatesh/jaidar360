@@ -14,6 +14,7 @@ import {
   useReactFlow,
   type Connection,
   type Edge,
+  type OnConnectEnd,
 } from "@xyflow/react";
 import { ArrowLeft, History, LayoutGrid, Loader2, Redo2, ShieldCheck, Undo2, UploadCloud } from "lucide-react";
 import { api, ApiError, session } from "../lib/api";
@@ -219,6 +220,33 @@ function Canvas() {
     return target?.type !== "trigger";
   }, []);
 
+  // A connection released away from an input handle: onto a node's body connects to that node's input;
+  // onto empty canvas opens the node picker there (n8n style).
+  const onConnectEnd: OnConnectEnd = useCallback(
+    (event, state) => {
+      if (state.isValid || !state.fromNode || state.fromHandle?.type !== "source") return;
+      const point = "changedTouches" in event ? event.changedTouches[0] : event;
+      const hit = document.elementFromPoint(point.clientX, point.clientY);
+      const connection = { source: state.fromNode.id, sourceHandle: state.fromHandle.id ?? null, targetHandle: null };
+
+      const targetId = hit?.closest(".react-flow__node")?.getAttribute("data-id");
+      if (targetId) {
+        if (isValidConnection({ ...connection, target: targetId })) onConnect({ ...connection, target: targetId });
+        return;
+      }
+      if (hit?.closest(".react-flow__pane")) {
+        useEditor.getState().openPicker({
+          nodeId: connection.source,
+          handleId: connection.sourceHandle,
+          x: point.clientX,
+          y: point.clientY,
+          position: screenToFlowPosition({ x: point.clientX, y: point.clientY }),
+        });
+      }
+    },
+    [isValidConnection, onConnect, screenToFlowPosition],
+  );
+
   const onDragOver = (e: DragEvent) => {
     if (e.dataTransfer.types.includes(DRAG_MIME)) {
       e.preventDefault();
@@ -244,6 +272,8 @@ function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        connectionRadius={36}
         isValidConnection={isValidConnection}
         onNodeDragStart={beginDrag}
         onNodeClick={(_, node) => select(node.id)}

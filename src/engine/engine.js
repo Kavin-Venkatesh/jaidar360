@@ -8,6 +8,7 @@ const sessions = require("./sessions");
 const queue = require("./queue");
 const renderers = require("./renderers");
 const { executors } = require("./executors");
+const locationLinks = require("../location-links/location-link.service");
 const { logError, logInfo } = require("../utils/logger");
 
 const MAX_STEPS_PER_RUN = 100;
@@ -47,6 +48,9 @@ function buildContext(tenant, agent, session, to) {
       };
     },
     saveMedia: (media) => sender.saveMedia(tenant, ctx.session.id, media),
+    // Location Link nodes: a one-time browser link bound to this session and the node it waits on.
+    createLocationLink: (node) =>
+      locationLinks.createLink({ tenantId: tenant.id, sessionId: ctx.session.id, frame: top(ctx.session), minutes: node.linkMinutes || 10 }),
   };
   return ctx;
 }
@@ -188,6 +192,12 @@ async function dispatch(ctx, event) {
     return sessions.save(session);
   }
 
+  return applyInput(ctx, event);
+}
+
+// Feeds an answer to the node the session is waiting on, then runs until the next input is needed.
+async function applyInput(ctx, event) {
+  const { session } = ctx;
   const frame = top(session);
   const node = frame && frame.waiting === "input" ? await nodeOf(frame) : null;
   if (!node || !executors[node.type]?.receive) return close(ctx, "cancelled", MESSAGES.flowChanged);
@@ -200,6 +210,40 @@ async function dispatch(ctx, event) {
   frame.nodeId = node.next?.[result.handle || "default"] || null;
   frame.waiting = null;
   return run(ctx);
+}
+
+// Input that arrives outside WhatsApp (the Location Link browser page). `request` names the session and the exact
+// node that issued the link; if the agent has since moved on, restarted or timed out, nothing happens.
+async function resumeWithInput(request, event) {
+  const inactive = { ok: false, message: "This link is no longer active. Continue in WhatsApp, or say hi to start again." };
+  const tenant = tenants.byId(request.tenantId);
+  const row = await prisma.session.findUnique({ where: { id: request.sessionId }, select: { agentId: true, agentPhone: true } });
+  if (!tenant || !row) return inactive;
+
+  // Same queue key as inbound WhatsApp messages, so a browser submit and a message can't interleave.
+  return queue.run(`${tenant.id}:${row.agentPhone}`, async () => {
+    const session = await sessions.active(tenant.id, row.agentId);
+    const frame = session && top(session);
+    const waitingHere =
+      session?.id === request.sessionId &&
+      frame?.waiting === "input" &&
+      frame.flowId === request.flowId &&
+      frame.version === request.version &&
+      frame.nodeId === request.nodeId;
+    const agent = tenants.agentById(tenant, row.agentId);
+    if (!waitingHere || !agent) return inactive;
+
+    const ctx = buildContext(tenant, agent, session, session.agentPhone);
+    session.pending = null;
+    try {
+      await applyInput(ctx, event);
+    } catch (error) {
+      logError("FLOW_RESUME_FAILED", error, { sessionId: session.id });
+      ctx.session.lastError = error.message;
+      await sessions.save(ctx.session).catch(() => {});
+    }
+    return { ok: true };
+  });
 }
 
 function restartChoice(event) {
@@ -353,4 +397,4 @@ async function expireIdleSessions({ notify = true } = {}) {
   return rows.length;
 }
 
-module.exports = { handleIncoming, expireIdleSessions, MESSAGES, RESTART_ID, CONTINUE_ID };
+module.exports = { handleIncoming, resumeWithInput, expireIdleSessions, MESSAGES, RESTART_ID, CONTINUE_ID };

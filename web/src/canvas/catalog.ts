@@ -1,6 +1,7 @@
 import {
   CircleStop,
   Image as ImageIcon,
+  Link2,
   List,
   MapPin,
   MessageCircleQuestion,
@@ -29,6 +30,7 @@ export const NODE_CATALOG: NodeMeta[] = [
   { type: "list", label: "List", description: "Menu of up to 10 rows, one output each", icon: List, color: "#15803d" },
   { type: "question", label: "Ask Question", description: "Text, number, phone, email or date", icon: MessageCircleQuestion, color: "#8b5cf6" },
   { type: "location", label: "Ask Location", description: "Asks the agent to share their location", icon: MapPin, color: "#ef4444" },
+  { type: "locationLink", label: "Location Link", description: "Browser link that captures live GPS", icon: Link2, color: "#f97316" },
   { type: "media", label: "Ask Media", description: "Photo or document upload", icon: ImageIcon, color: "#ec4899" },
   { type: "condition", label: "If / Condition", description: "Branch on saved answers", icon: Split, color: "#64748b" },
   { type: "executeFlow", label: "Execute Flow", description: "Jump to, or call and return from, another flow", icon: SquareArrowOutUpRight, color: "#0d9488" },
@@ -71,6 +73,8 @@ export function defaultData(type: NodeType, nodes: FlowNode[]): NodeData {
       return { label: "Question", prompt: "", inputType: "text", validation: {}, errorMessage: "", maxAttempts: 3, saveAs: nextVariable("answer", nodes) };
     case "location":
       return { label: "Location", prompt: "📍 Please share your current location.", saveAs: nextVariable("location", nodes) };
+    case "locationLink":
+      return { label: "Location link", prompt: "📍 Tap the button below and allow location access to share where you are.", buttonText: "Share location", linkMinutes: 10, saveAs: nextVariable("gps_location", nodes) };
     case "media":
       return { label: "Media", prompt: "📷 Please send a photo.", accept: "image", required: true, saveAs: nextVariable("photo", nodes) };
     case "condition":

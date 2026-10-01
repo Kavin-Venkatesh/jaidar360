@@ -96,6 +96,8 @@ function compileNode(node) {
     }
     case "location":
       return { ...base, prompt: trim(d.prompt), saveAs: trim(d.saveAs) };
+    case "locationLink":
+      return { ...base, prompt: trim(d.prompt), buttonText: trim(d.buttonText), linkMinutes: Number(d.linkMinutes ?? 10), saveAs: trim(d.saveAs) };
     case "media":
       return { ...base, prompt: trim(d.prompt), accept: d.accept || "image", required: d.required !== false, saveAs: trim(d.saveAs) };
     case "condition":

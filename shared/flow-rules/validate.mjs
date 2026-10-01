@@ -99,7 +99,7 @@ export function validateFlow(canvas, ctx = {}) {
     const saveAs = savedVariable(node);
     if (["buttons", "list"].includes(node.type) && saveAs === null) {
       // optional for menus
-    } else if (["question", "location", "media"].includes(node.type) && !saveAs) {
+    } else if (["question", "location", "locationLink", "media"].includes(node.type) && !saveAs) {
       error("\"Save as\" variable name is required.", node.id, "saveAs");
     }
     if (saveAs) {
@@ -182,6 +182,16 @@ export function validateFlow(canvas, ctx = {}) {
       case "location":
         requireText(node, "prompt", d.prompt, LIMITS.locationBody, "Prompt");
         break;
+
+      case "locationLink": {
+        requireText(node, "prompt", d.prompt, LIMITS.ctaBody, "Message");
+        requireText(node, "buttonText", d.buttonText, LIMITS.ctaButton, "Button text");
+        const minutes = Number(d.linkMinutes ?? 10);
+        if (!Number.isInteger(minutes) || minutes < LIMITS.minLinkMinutes || minutes > LIMITS.maxLinkMinutes) {
+          error(`Link validity must be ${LIMITS.minLinkMinutes}–${LIMITS.maxLinkMinutes} minutes.`, node.id, "linkMinutes");
+        }
+        break;
+      }
 
       case "media":
         requireText(node, "prompt", d.prompt, LIMITS.textBody, "Prompt");

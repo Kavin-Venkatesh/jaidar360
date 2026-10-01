@@ -267,6 +267,26 @@ function LocationForm({ node, update, problems }: FormProps) {
   );
 }
 
+function LocationLinkForm({ node, update, problems }: FormProps) {
+  return (
+    <>
+      <p className="rounded-md bg-orange-50 p-2 text-[11px] leading-snug text-orange-900">
+        Sends a one-time link. The agent opens it in the browser and allows location access; live GPS and its accuracy come back here, and the flow continues automatically.
+      </p>
+      <Field label="Message" problems={problems("prompt")}>
+        <TextArea rows={3} value={node.data.prompt} max={LIMITS.ctaBody} onChange={(v) => update({ prompt: v }, "prompt")} />
+      </Field>
+      <Field label="Button text" problems={problems("buttonText")}>
+        <TextInput value={node.data.buttonText || ""} max={LIMITS.ctaButton} onChange={(v) => update({ buttonText: v }, "buttonText")} />
+      </Field>
+      <Field label="Link valid for (minutes)" hint="Each link works once. A fresh link is sent if the agent replies with text instead." problems={problems("linkMinutes")}>
+        <TextInput value={String(node.data.linkMinutes ?? 10)} onChange={(v) => update({ linkMinutes: v === "" ? "" : Number(v) }, "linkMinutes")} />
+      </Field>
+      <SaveAsField node={node} update={update} problems={problems} />
+    </>
+  );
+}
+
 function MediaForm({ node, update, problems }: FormProps) {
   return (
     <>
@@ -383,6 +403,7 @@ const FORMS = {
   list: ListForm,
   question: QuestionForm,
   location: LocationForm,
+  locationLink: LocationLinkForm,
   media: MediaForm,
   condition: ConditionForm,
   executeFlow: ExecuteFlowForm,

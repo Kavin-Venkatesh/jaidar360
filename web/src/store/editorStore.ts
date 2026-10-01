@@ -14,6 +14,8 @@ export interface Picker {
   handleId: string | null;
   x: number;
   y: number;
+  // Canvas position for the new node (set when a connection is dropped on empty canvas).
+  position?: { x: number; y: number };
 }
 
 const HISTORY_COALESCE_MS = 1200;

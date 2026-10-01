@@ -9,7 +9,7 @@ type Value = unknown;
 function isMedia(v: Value): v is { path?: string; mimeType?: string; kind?: string; caption?: string; error?: string } {
   return typeof v === "object" && v !== null && "mediaId" in v;
 }
-function isLocation(v: Value): v is { latitude: number; longitude: number; name?: string; address?: string; flagged?: boolean } {
+function isLocation(v: Value): v is { latitude: number; longitude: number; name?: string; address?: string; flagged?: boolean; source?: string; accuracy?: number | null } {
   return typeof v === "object" && v !== null && "latitude" in v && "longitude" in v;
 }
 
@@ -32,7 +32,13 @@ function AnswerValue({ value }: { value: Value }) {
         <a href={`https://maps.google.com/?q=${value.latitude},${value.longitude}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-green-700 underline">
           <MapPin size={13} /> {value.name || value.address || `${value.latitude.toFixed(5)}, ${value.longitude.toFixed(5)}`}
         </a>
-        {value.flagged && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title="The agent picked a place instead of sharing live GPS">picked place</span>}
+        {value.source === "browser" && <span className="text-[11px] text-slate-500">browser GPS{typeof value.accuracy === "number" ? ` ±${value.accuracy} m` : ""}</span>}
+        {value.flagged &&
+          (value.source === "browser" ? (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title="Browser GPS accuracy was worse than 100 m">low accuracy</span>
+          ) : (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800" title="The agent picked a place instead of sharing live GPS">picked place</span>
+          ))}
       </span>
     );
   }

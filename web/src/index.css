@@ -118,10 +118,23 @@ body,
 }
 
 .wa-node .react-flow__handle {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   background: white;
   border: 2px solid #94a3b8;
+}
+/* Invisible, larger grab/drop area around each handle. */
+.wa-node .react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+}
+/* While dragging a connection, highlight inputs it can land on. */
+.react-flow__handle.react-flow__handle-left.connectingto,
+.react-flow__handle.react-flow__handle-left.valid {
+  border-color: var(--node-selected);
+  background: #dcfce7;
 }
 .wa-node .react-flow__handle:hover {
   border-color: var(--node-selected);
@@ -133,11 +146,11 @@ body,
   border-color: #dc2626;
 }
 
-/* The “+” that appears next to an unconnected output. */
+/* The “+” that appears next to an unconnected output (a child of the handle, so it drags a connection too). */
 .wa-add-next {
   position: absolute;
   top: 50%;
-  right: -30px;
+  left: 20px;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
@@ -148,8 +161,9 @@ body,
   border: 1px solid #cbd5e1;
   background: white;
   color: #64748b;
-  cursor: pointer;
+  cursor: crosshair;
   z-index: 1;
+  padding: 0;
 }
 .wa-add-next:hover {
   border-color: var(--node-selected);

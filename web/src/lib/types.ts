@@ -7,6 +7,7 @@ export type NodeType =
   | "list"
   | "question"
   | "location"
+  | "locationLink"
   | "media"
   | "condition"
   | "executeFlow"

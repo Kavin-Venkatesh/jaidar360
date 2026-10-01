@@ -76,6 +76,7 @@ function Summary({ type, data }: { type: NodeType; data: NodeData }) {
         </div>
       );
     case "location":
+    case "locationLink":
     case "media":
       return (
         <div className="space-y-1">
@@ -121,14 +122,14 @@ function Summary({ type, data }: { type: NodeType; data: NodeData }) {
 function OutputHandle({ nodeId, output }: { nodeId: string; output: Output }) {
   const connected = useEditor((s) => s.edges.some((e) => e.source === nodeId && (e.sourceHandle ?? null) === output.id));
   const openPicker = useEditor((s) => s.openPicker);
+  // The "+" lives inside the handle, so dragging it starts a connection (like n8n) and a plain click opens the picker.
   return (
-    <>
-      <Handle type="source" position={Position.Right} id={output.id ?? undefined} className={output.tone ? `wa-handle-${output.tone}` : undefined} />
+    <Handle type="source" position={Position.Right} id={output.id ?? undefined} className={output.tone ? `wa-handle-${output.tone}` : undefined}>
       {!connected && (
         <button
           type="button"
-          className="wa-add-next nodrag"
-          title="Add the next node"
+          className="wa-add-next"
+          title="Drag to connect, or click to add the next node"
           onClick={(event) => {
             event.stopPropagation();
             openPicker({ nodeId, handleId: output.id, x: event.clientX, y: event.clientY });
@@ -137,7 +138,7 @@ function OutputHandle({ nodeId, output }: { nodeId: string; output: Output }) {
           <Plus size={12} />
         </button>
       )}
-    </>
+    </Handle>
   );
 }
 
@@ -225,13 +226,15 @@ function FlowNodeCardImpl({ id, type, data, selected }: NodeProps<FlowNode>) {
 
 export const FlowNodeCard = memo(FlowNodeCardImpl);
 
-export const nodeTypes = {
+// Typed by NodeType so adding a node type without registering it here fails the type check.
+export const nodeTypes: Record<NodeType, typeof FlowNodeCard> = {
   trigger: FlowNodeCard,
   message: FlowNodeCard,
   buttons: FlowNodeCard,
   list: FlowNodeCard,
   question: FlowNodeCard,
   location: FlowNodeCard,
+  locationLink: FlowNodeCard,
   media: FlowNodeCard,
   condition: FlowNodeCard,
   executeFlow: FlowNodeCard,

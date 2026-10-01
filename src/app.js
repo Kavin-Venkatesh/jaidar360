@@ -6,6 +6,7 @@ const env = require("./config/env");
 const whatsappRoutes = require("./routes/whatsapp.routes");
 const locationRoutes = require("./routes/location.routes");
 const apiRoutes = require("./api.routes");
+const locationLinkRoutes = require("./location-links/location-link.routes");
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(express.static("public"));
 
 app.use("/webhooks", whatsappRoutes);
 app.use("/api", apiRoutes);
+app.use("/flow-location", locationLinkRoutes);
 
 // Canvas flow builder UI (built with `npm run web:build`). In development use the Vite dev server instead.
 const builderDist = path.join(__dirname, "..", "web", "dist");
